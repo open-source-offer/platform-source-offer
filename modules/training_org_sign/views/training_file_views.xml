@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_training_file_form_sign" model="ir.ui.view">
+        <field name="name">training.file.form.sign</field>
+        <field name="model">training.file</field>
+        <field name="inherit_id" ref="training_org.view_training_file_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//div[@name='button_box']" position="inside">
+                <button name="action_open_sign_requests" type="object"
+                        class="oe_stat_button" icon="fa-pencil-square-o"
+                        invisible="sign_request_count == 0">
+                    <field name="sign_request_count" widget="statinfo" string="Parapheurs"/>
+                </button>
+            </xpath>
+            <xpath expr="//header" position="inside">
+                <button name="action_request_signature" type="object"
+                        string="Faire signer électroniquement"
+                        class="btn-primary"
+                        invisible="state not in ('draft', 'sent') or signature_state == 'pending'"
+                        groups="training_org.group_training_user"/>
+                <field name="signature_state" widget="badge" readonly="1"
+                       invisible="signature_state == 'none'"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

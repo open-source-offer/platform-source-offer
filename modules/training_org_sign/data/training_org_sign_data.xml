@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Rôles de signature correspondant aux parties d'une pièce contractuelle
+     de formation.
+
+     `noupdate="1"` : un exploitant peut renommer ces rôles pour coller à son
+     vocabulaire ; une mise à jour du module ne doit pas écraser son libellé.
+     Les identifiants externes, eux, sont ce sur quoi le code s'appuie — ils
+     ne changent pas.
+
+     Le signataire n'est jamais déduit d'une expression : il est désigné
+     explicitement par le dossier contractuel
+     (`training.file._signature_signatories()`). D'où la politique « empty » —
+     faire deviner au parapheur qui signe un contrat serait une mauvaise
+     idée. -->
+<odoo noupdate="1">
+    <record id="sign_role_training_provider" model="sign.oca.role">
+        <field name="name">Organisme de formation</field>
+        <field name="domain">[]</field>
+        <field name="partner_selection_policy">empty</field>
+    </record>
+
+    <record id="sign_role_training_counterparty" model="sign.oca.role">
+        <field name="name">Cocontractant</field>
+        <field name="domain">[]</field>
+        <field name="partner_selection_policy">empty</field>
+    </record>
+
+    <record id="sign_role_training_funder" model="sign.oca.role">
+        <field name="name">Financeur</field>
+        <field name="domain">[]</field>
+        <field name="partner_selection_policy">empty</field>
+    </record>
+</odoo>

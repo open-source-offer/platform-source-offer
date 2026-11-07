@@ -1,0 +1,8 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_sign_oca_request_training_user,sign.oca.request gestionnaire de formation,sign_oca.model_sign_oca_request,training_org.group_training_user,1,1,1,0
+access_sign_oca_request_training_manager,sign.oca.request responsable de formation,sign_oca.model_sign_oca_request,training_org.group_training_manager,1,1,1,1
+access_sign_oca_request_signer_training_user,sign.oca.request.signer gestionnaire de formation,sign_oca.model_sign_oca_request_signer,training_org.group_training_user,1,1,1,0
+access_sign_oca_request_signer_training_manager,sign.oca.request.signer responsable de formation,sign_oca.model_sign_oca_request_signer,training_org.group_training_manager,1,1,1,1
+access_sign_oca_request_log_training_user,sign.oca.request.log gestionnaire de formation,sign_oca.model_sign_oca_request_log,training_org.group_training_user,1,0,0,0
+access_sign_oca_role_training_user,sign.oca.role gestionnaire de formation,sign_oca.model_sign_oca_role,training_org.group_training_user,1,0,0,0
+access_sign_oca_field_training_user,sign.oca.field gestionnaire de formation,sign_oca.model_sign_oca_field,training_org.group_training_user,1,0,0,0

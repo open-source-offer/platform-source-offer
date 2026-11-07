@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- =================================================================
+         Cloisonnement des pièces contractuelles mises au parapheur
+
+         POURQUOI CES DEUX RÈGLES EXISTENT — à lire avant d'y toucher.
+
+         Le parapheur communautaire ouvre la lecture de TOUTE demande de
+         signature de la société à n'importe quel utilisateur interne
+         (`base.group_user`, ligne `edit_sign_request_base_user` de son
+         `ir.model.access.csv`, sans règle d'enregistrement restrictive). Ce
+         choix se défend pour des documents de parapheur ordinaires.
+
+         Il ne se défend plus dès qu'on y fait passer un contrat de formation :
+         la pièce porte un prix, l'identité d'un cocontractant, parfois celle
+         d'un particulier. Le socle refuse pourtant au formateur tout accès au
+         dossier contractuel (ACL 0/0/0/0 sur `training.file`). Sans les règles
+         ci-dessous, mettre une convention au parapheur reviendrait à la rendre
+         lisible de tous ceux à qui le socle vient précisément de la refuser —
+         soit exactement l'élargissement d'accès que ce pont doit éviter.
+
+         Les règles sont GLOBALES, et c'est délibéré : les règles d'un groupe
+         s'additionnent (OU), seules les règles globales se combinent par ET et
+         peuvent donc RESTREINDRE un accès déjà accordé par un autre module.
+         Une règle posée sur `base.group_user` élargirait au contraire l'accès
+         des membres de `sign_oca_group_user`, qui est aujourd'hui limité aux
+         demandes dont ils sont destinataires.
+
+         Trois portes, et trois seulement :
+           1. la demande ne porte sur aucune pièce contractuelle de formation ;
+           2. l'utilisateur est lui-même partie signataire — sans quoi il ne
+              pourrait pas signer ce qu'on lui demande de signer ;
+           3. l'utilisateur tient un rôle administratif du domaine, qui lui
+              donnait déjà accès au dossier contractuel.
+
+         L'accès des signataires externes ne passe pas par ici : le portail du
+         parapheur les authentifie par jeton et lit en `sudo()`, hors du
+         périmètre des règles d'enregistrement.
+         ================================================================= -->
+
+    <record id="rule_sign_oca_request_training_scope" model="ir.rule">
+        <field name="name">Parapheur : pièces contractuelles de formation cloisonnées</field>
+        <field name="model_id" ref="sign_oca.model_sign_oca_request"/>
+        <field name="global" eval="True"/>
+        <field name="domain_force">['|', '|',
+            ('training_document_id', '=', False),
+            ('signer_ids.partner_id', 'in', [user.partner_id.id, user.partner_id.commercial_partner_id.id]),
+            (1, '=', 1) if user.has_group('training_org.group_training_user') else (0, '=', 1)]</field>
+    </record>
+
+    <record id="rule_sign_oca_request_signer_training_scope" model="ir.rule">
+        <field name="name">Parapheur : signataires des pièces contractuelles cloisonnés</field>
+        <field name="model_id" ref="sign_oca.model_sign_oca_request_signer"/>
+        <field name="global" eval="True"/>
+        <field name="domain_force">['|', '|',
+            ('request_id.training_document_id', '=', False),
+            ('partner_id', 'in', [user.partner_id.id, user.partner_id.commercial_partner_id.id]),
+            (1, '=', 1) if user.has_group('training_org.group_training_user') else (0, '=', 1)]</field>
+    </record>
+</odoo>
