@@ -47,8 +47,21 @@ Conséquences, non négociables :
   seulement à qui reçoit une copie du logiciel : dès lors que ce module est
   actif sur un abonnement, la source de `sign_oca` et de ce module doit leur
   être accessible.
+
+# Notes de version
+
+- 19.0.1.0.1 — correctif de sécurité : (1) le téléchargement du PDF depuis le
+  portail (`/my/sign/<id>/download`) vérifie désormais que l'utilisateur est
+  signataire (ou parent d'un signataire) ou interne avec droit de lecture,
+  avant tout `sudo()` ; (2) les règles d'accès ne donnent plus accès à tous
+  les enfants du contact de la société (formateurs inclus) : seul le contact
+  signataire lui-même est retenu. Règles en `noupdate=0` : appliquées par la
+  mise à jour du module. (3) la signature (`/sign_oca/sign`) exige un jeton
+  valide ou le signataire authentifié ; (4) une post-migration invalide les
+  jetons d'accès des PDF de parapheur déjà émis. Pour le téléchargement, les
+  internes ne passent que par leurs droits propres.
 """,
-    "version": "19.0.1.0.0",
+    "version": "19.0.1.0.1",
     "category": "Human Resources/Training",
     "author": "AMWALO.COM",
     "website": "https://www.amwalo.com",

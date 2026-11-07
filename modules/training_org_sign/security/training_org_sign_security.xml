@@ -28,8 +28,12 @@
 
          Trois portes, et trois seulement :
            1. la demande ne porte sur aucune pièce contractuelle de formation ;
-           2. l'utilisateur est lui-même partie signataire — sans quoi il ne
-              pourrait pas signer ce qu'on lui demande de signer ;
+           2. le contact de l'utilisateur est lui-même signataire — sans quoi
+              il ne pourrait pas signer ce qu'on lui demande de signer. Seul
+              son propre contact compte, PAS celui de sa société parente :
+              l'organisme signe sous le contact de sa société, et l'étendre
+              aurait ouvert toutes les conventions à tout utilisateur interne
+              rattaché à ce contact (un formateur, par exemple) ;
            3. l'utilisateur tient un rôle administratif du domaine, qui lui
               donnait déjà accès au dossier contractuel.
 
@@ -44,7 +48,7 @@
         <field name="global" eval="True"/>
         <field name="domain_force">['|', '|',
             ('training_document_id', '=', False),
-            ('signer_ids.partner_id', 'in', [user.partner_id.id, user.partner_id.commercial_partner_id.id]),
+            ('signer_ids.partner_id', 'in', [user.partner_id.id]),
             (1, '=', 1) if user.has_group('training_org.group_training_user') else (0, '=', 1)]</field>
     </record>
 
@@ -54,7 +58,7 @@
         <field name="global" eval="True"/>
         <field name="domain_force">['|', '|',
             ('request_id.training_document_id', '=', False),
-            ('partner_id', 'in', [user.partner_id.id, user.partner_id.commercial_partner_id.id]),
+            ('partner_id', 'in', [user.partner_id.id]),
             (1, '=', 1) if user.has_group('training_org.group_training_user') else (0, '=', 1)]</field>
     </record>
 </odoo>
