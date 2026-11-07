@@ -7,6 +7,26 @@ from odoo.exceptions import UserError
 
 _logger = logging.getLogger(__name__)
 
+# Lien vers la pièce contractuelle : posé uniquement par le chemin serveur
+# (`training.document.action_request_signature`, en superutilisateur). Les deux
+# champs rapatriés sont des related stockés que l'ORM écrit malgré `readonly`,
+# et la reprise de la signature sur le dossier s'y fiait.
+LINK_FIELDS = frozenset(
+    {"training_res_model", "training_res_id", "training_document_id"}
+)
+
+# Pièce et contenu de signature : figés dès l'envoi.
+FROZEN_REQUEST_FIELDS = frozenset(
+    {
+        "data",
+        "signatory_data",
+        "current_hash",
+        "signed",
+        "training_document_id",
+        "company_id",
+    }
+)
+
 
 class SignOcaRequest(models.Model):
     """Demande de signature rattachée à un document réglementaire émis.
@@ -53,15 +73,109 @@ class SignOcaRequest(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
+        if not self.env.su:
+            if any(LINK_FIELDS & set(vals) for vals in vals_list):
+                raise UserError(
+                    "Le rattachement à une pièce contractuelle n'est posé que "
+                    "par la mise au parapheur du document."
+                )
         requests = super().create(vals_list)
+        if not self.env.su and any(
+            request.training_document_id
+            or request.training_res_model
+            or request.training_res_id
+            for request in requests.sudo()
+        ):
+            # Contrôle APRÈS création : un défaut de contexte
+            # (`default_training_document_id`) ou un `ir.default` personnel
+            # pose le rattachement sans figurer dans `vals`.
+            raise UserError(
+                "Le rattachement à une pièce contractuelle n'est posé que par "
+                "la mise au parapheur du document."
+            )
+        if not self.env.su and any(
+            request.state != "1_draft" for request in requests.sudo()
+        ):
+            # Contrôle APRÈS création : l'état peut venir d'un défaut ou d'une
+            # copie (`copy(default=...)`), pas seulement de `vals`.
+            raise UserError(
+                "Un parapheur est créé en brouillon : il passe à l'envoi puis "
+                "à la signature par les actions prévues."
+            )
         requests._training_invalidate_files()
         return requests
 
+    def copy(self, default=None):
+        if not self.env.su and any(
+            request.training_document_id for request in self.sudo()
+        ):
+            raise UserError(
+                "Un parapheur rattaché à une pièce contractuelle ne se "
+                "duplique pas : mettez la pièce au parapheur."
+            )
+        return super().copy(default)
+
     def write(self, vals):
+        self._training_check_write_allowed(vals)
         result = super().write(vals)
         if "state" in vals or "training_document_id" in vals:
             self._training_invalidate_files()
         return result
+
+    def _training_check_write_allowed(self, vals):
+        """Gèle l'état et le contenu d'un parapheur envoyé (ADR-SIGN-02, D4).
+
+        Hors superutilisateur, seules deux transitions d'état sont admises :
+        brouillon vers envoyé (``action_send``) et annulation. Un parapheur
+        ne passe donc jamais à « signé » par écriture directe : ``_check_signed``
+        tourne en superutilisateur dans ``action_sign``.
+
+        :raise UserError: écriture interdite.
+        """
+        if self.env.su:
+            return
+        if LINK_FIELDS & set(vals):
+            raise UserError(
+                "Le rattachement à une pièce contractuelle ne se modifie pas "
+                "à la main."
+            )
+        if "active" in vals and not vals["active"] and any(
+            record.state == "2_signed" for record in self.sudo()
+        ):
+            # L'archivage masquerait la pièce de preuve d'un parapheur signé.
+            raise UserError(
+                "Un parapheur signé ne s'archive pas : il est la pièce de preuve."
+            )
+        if "state" in vals:
+            for record in self.sudo():
+                new_state = vals["state"]
+                allowed = (
+                    new_state == record.state
+                    # Un parapheur signé ne s'annule pas (pièce de preuve).
+                    or (new_state == "3_cancel" and record.state != "2_signed")
+                    or (record.state == "1_draft" and new_state == "0_sent")
+                )
+                if not allowed:
+                    raise UserError(
+                        "Ce changement d'état n'est pas permis : un parapheur "
+                        "passe à « signé » par les signatures seulement."
+                    )
+        if {"data", "company_id"} & set(vals) and any(
+            record.training_document_id for record in self.sudo()
+        ):
+            # L'exemplaire émis et scellé ne se remplace pas, même en
+            # brouillon : ce qui est signé doit être ce qui a été émis.
+            raise UserError(
+                "La pièce contractuelle mise au parapheur est l'exemplaire "
+                "émis : elle ne peut pas être remplacée."
+            )
+        if FROZEN_REQUEST_FIELDS & set(vals) and any(
+            record.state != "1_draft" for record in self.sudo()
+        ):
+            raise UserError(
+                "Ce parapheur a été envoyé : ses signataires et sa pièce ne "
+                "sont plus modifiables."
+            )
 
     def _training_invalidate_files(self):
         """Purge l'avancement de signature mis en cache côté dossier.
@@ -126,7 +240,14 @@ class SignOcaRequest(models.Model):
             l'opération au fil de discussion du dossier.
         """
         self.ensure_one()
-        if self.training_res_model != "training.file" or not self.training_res_id:
+        # La cible est lue UNIQUEMENT par le document réglementaire : les champs
+        # `training_res_*` sont des copies stockées, jamais une source de vérité.
+        document = self.training_document_id.sudo()
+        if (
+            not document
+            or document.res_model != "training.file"
+            or not document.res_id
+        ):
             return False
         # Date de la dernière signature apposée : c'est elle qui fait courir le
         # délai de rétractation, pas la date du traitement.
@@ -140,7 +261,7 @@ class SignOcaRequest(models.Model):
         ).date()
 
         training_file = (
-            self.env["training.file"].sudo().browse(self.training_res_id).exists()
+            self.env["training.file"].sudo().browse(document.res_id).exists()
         )
         if not training_file:
             return False
@@ -169,6 +290,30 @@ class SignOcaRequest(models.Model):
     # ------------------------------------------------------------------
     # Garde d'intégrité
     # ------------------------------------------------------------------
+
+    @api.ondelete(at_uninstall=False)
+    def _unlink_except_training_sent(self):
+        """Refuse, hors su, la suppression d'un parapheur rattaché et envoyé.
+
+        Il est une preuve : il s'annule (``cancel``), il ne se supprime pas.
+        Un brouillon rattaché reste supprimable.
+        """
+        if self.env.su:
+            return
+        sent = self.sudo().filtered(
+            lambda request: request.training_document_id
+            and request.state != "1_draft"
+        )
+        if sent:
+            raise UserError(
+                self.env._(
+                    "Ces parapheurs sont rattachés à une pièce contractuelle et "
+                    "ne sont plus en brouillon : ils sont conservés comme "
+                    "preuve (un parapheur envoyé s'annule, il ne se supprime "
+                    "pas) : %(names)s",
+                    names=", ".join(sent.mapped("name")),
+                )
+            )
 
     @api.ondelete(at_uninstall=False)
     def _unlink_except_training_signed(self):

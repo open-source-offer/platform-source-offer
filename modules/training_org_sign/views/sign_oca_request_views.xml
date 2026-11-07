@@ -13,6 +13,11 @@
                 <field name="training_document_id" readonly="1"
                        invisible="not training_document_id"/>
             </xpath>
+            <!-- L'exemplaire émis ne se remplace pas, même en brouillon (la
+                 garde serveur est dans `_training_check_write_allowed`). -->
+            <xpath expr="//field[@name='data']" position="attributes">
+                <attribute name="readonly">state != '1_draft' or training_document_id</attribute>
+            </xpath>
         </field>
     </record>
 </odoo>

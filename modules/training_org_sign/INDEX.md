@@ -2,8 +2,8 @@
 
 | Champ | Valeur |
 |---|---|
-| Version en service | 19.0.1.0.1 (depuis le 2026-11-06) |
-| Étiquettes | `training_org_sign-19.0.1.0.1` (en service), `training_org_sign-19.0.1.0.0` (retirée le 2026-11-06) |
+| Version en service | 19.0.1.0.2 (depuis le 2026-11-07) |
+| Étiquettes | `training_org_sign-19.0.1.0.2` (en service), `training_org_sign-19.0.1.0.1` (retirée le 2026-11-07), `training_org_sign-19.0.1.0.0` (retirée le 2026-11-06) |
 | Licence | AGPL-3.0 (manifeste : `AGPL-3`) |
 | État | Publiée telle qu'elle est exploitée |
 | Archives | une par étiquette (Releases), SHA-256 dans `SHA256SUMS` |

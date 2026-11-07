@@ -13,7 +13,8 @@ from pathlib import Path
 
 from PyPDF2 import PdfWriter
 
-from odoo.exceptions import AccessError
+from odoo import fields
+from odoo.exceptions import AccessError, UserError
 from odoo.tests import HttpCase, tagged
 from odoo.tests.common import JsonRpcException
 
@@ -334,15 +335,153 @@ class TestSignDownloadAccess(TrainingOrgCommon, HttpCase):
             ],
             limit=1,
         )
-        request.with_user(self.user_manager).action_send()
         signer = request.signer_ids[0]
+        signer.partner_id.email = "cocontractant@example.com"
+        request.with_user(self.user_manager).action_send()
         token = signer.sudo().access_token
         self.assertTrue(token)
         link = f"/sign_oca/document/{signer.id}/{token}"
-        messages = self.env["mail.message"].search([("body", "ilike", link)])
-        self.assertTrue(messages)
+        # ADR-SIGN-02 : l'invitation est émise par le système ; le destinataire
+        # reçoit un courriel au lien absolu, mais l'expéditeur ne peut plus
+        # relire le message (le jeton y figure).
+        mails = self.env["mail.mail"].sudo().search(
+            [
+                ("recipient_ids", "in", signer.partner_id.ids),
+                ("body_html", "ilike", link),
+            ]
+        )
+        self.assertTrue(mails)
+        # Le lien devient absolu à la préparation de l'envoi sortant.
+        outgoing = mails[0]._prepare_outgoing_list()
+        self.assertTrue(outgoing)
+        self.assertRegex(outgoing[0]["body"], r"https?://[^\"' ]+" + re.escape(link))
+        self.assertFalse(
+            self.env["mail.message"]
+            .with_user(self.user_manager)
+            .search([("body", "ilike", token)])
+        )
         self.authenticate(None, None)
         self.assertEqual(self.url_open(link).status_code, 200)
+
+    def test_t22_two_signatures_through_the_controller_complete_the_file(self):
+        """Bout en bout : deux signatures par le contrôleur, dossier signé."""
+        self.authenticate(None, None)
+        for signer in self.sign_request.signer_ids:
+            signer._portal_ensure_token()
+        self.sign_request.data = self._blank_pdf()
+        for signer in self.sign_request.signer_ids:
+            self._sign(signer, signer.sudo().access_token)
+        self.env.invalidate_all()
+        self.assertEqual(self.sign_request.state, "2_signed")
+        self.assertEqual(self.file.state, "signed")
+        last = max(self.sign_request.signer_ids.mapped("signed_on"))
+        self.assertEqual(
+            self.file.date_signature,
+            fields.Datetime.context_timestamp(self.sign_request, last).date(),
+        )
+        for signer in self.sign_request.signer_ids:
+            self.assertTrue(signer.inalterable_hash)
+
+    def test_t14_internal_signer_signs_through_the_controller(self):
+        """La porte « identité » : un interne signataire signe par le lien."""
+        user = self._make_user(
+            "signataire.interne.http",
+            ["training_org.group_training_user", "sign_oca.sign_oca_group_user"],
+            self.company_a,
+        )
+        user.password = PASSWORD
+        signer = self.sign_request.signer_ids[0]
+        signer.partner_id = user.partner_id
+        signer._portal_ensure_token()
+        self.sign_request.data = self._blank_pdf()
+        self.authenticate(user.login, PASSWORD)
+        self._sign(signer, "sans-jeton")
+        signer.invalidate_recordset()
+        self.assertTrue(signer.signed_on)
+
+    @staticmethod
+    def _blank_pdf():
+        writer, buffer = PdfWriter(), BytesIO()
+        writer.add_blank_page(width=200, height=200)
+        writer.write(buffer)
+        return b64encode(buffer.getvalue())
+
+    def test_r1_rotation_kills_old_links_and_keeps_new_ones(self):
+        """Après rotation : ancien lien vers /my, ancien jeton 404, nouveau 200."""
+        signer = self._portal_signer_line()
+        old = signer.access_token
+        self.env["sign.oca.request"]._training_rotate_signer_tokens(resend=False)
+        self.env.invalidate_all()
+        new = signer.sudo().access_token
+        self.assertNotEqual(new, old)
+        self.authenticate(None, None)
+        response = self.url_open(
+            f"/sign_oca/document/{signer.id}/{old}", allow_redirects=False
+        )
+        self.assertIn(response.status_code, (301, 302, 303))
+        self.assertTrue(response.headers["Location"].startswith("/my"))
+        self.assertEqual(
+            self.url_open(f"/sign_oca/document/{signer.id}/{new}").status_code, 200
+        )
+        with self.assertRaises(JsonRpcException) as caught:
+            self._sign(signer, old)
+        self.assertEqual(caught.exception.code, 404)
+        signer.invalidate_recordset()
+        self.assertFalse(signer.signed_on)
+        self._sign(signer, new)
+        signer.invalidate_recordset()
+        self.assertTrue(signer.signed_on)
+
+    def test_h1_forged_duplicate_pdf_is_never_served(self):  # FAIL-AVANT
+        """Une pièce jointe détournée vers le PDF ne doit jamais être servie."""
+        forged = b"%PDF-1.4 forged"
+        request = self.sign_request
+        attachment = self.env["ir.attachment"].with_user(self.user_manager).create(
+            {
+                "name": "x.pdf",
+                "raw": forged,
+                "res_model": "sign.oca.request",
+                "res_id": request.id,
+            }
+        )
+        with self.assertRaises(UserError):
+            attachment.write({"res_field": "data"})
+        self.authenticate(self.portal_signer.login, PASSWORD)
+        response = self.url_open(f"/my/sign/{request.id}/download")
+        self.assertNotEqual(response.content, forged)
+        signer = request.signer_ids[0]
+        signer._portal_ensure_token()
+        self.authenticate(None, None)
+        response = self.url_open(
+            f"/sign_oca/content/{signer.id}/{signer.sudo().access_token}"
+        )
+        self.assertNotEqual(response.content, forged)
+
+    def test_h2_composer_smuggled_pdf_is_never_served(self):  # FAIL-AVANT
+        """Pièce du composeur réaffectée en sudo par message_post : jamais servie."""
+        forged = b"%PDF-1.4 forged"
+        request = self.sign_request
+        attachment = self.env["ir.attachment"].with_user(self.user_manager).create(
+            {
+                "name": "c.pdf",
+                "raw": forged,
+                "res_model": "mail.compose.message",
+                "res_id": 0,
+            }
+        )
+        try:
+            attachment.write({"res_field": "data"})
+            request.with_user(self.user_manager).message_post(
+                body="x", attachment_ids=attachment.ids
+            )
+        except UserError:
+            pass
+        self.authenticate(self.portal_signer.login, PASSWORD)
+        response = self.url_open(f"/my/sign/{request.id}/download")
+        self.assertNotEqual(response.content, forged)
+        self.authenticate(self.user_manager.login, PASSWORD)
+        response = self.url_open(f"/web/content/sign.oca.request/{request.id}/data")
+        self.assertNotEqual(response.content, forged)
 
     def test_portal_list_still_shows_the_signer_links(self):
         signer = self._portal_signer_line()

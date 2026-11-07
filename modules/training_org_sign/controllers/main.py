@@ -55,7 +55,7 @@ class TrainingOrgPortalSign(PortalSign):
     def portal_download_signed(self, request_id, **kw):
         # Même réponse pour « inexistant » et « interdit » : pas d'oracle.
         if not self._download_is_allowed(request_id):
-            return request.not_found()
+            raise NotFound()
         return super().portal_download_signed(request_id, **kw)
 
     @http.route(
@@ -89,8 +89,12 @@ class TrainingOrgPortalSign(PortalSign):
         )
         if not (token_ok or identity_ok):
             raise NotFound()
+        # Le marqueur atteste que la vérification ci-dessus a porté sur CE
+        # signataire ; `action_sign` exige en plus `env.su` (ADR-SIGN-02, D3).
         # Le jeton n'est transmis (au journal) que s'il a réellement servi.
-        return signer_sudo.action_sign(
+        return signer_sudo.with_context(
+            training_sign_verified_signer_id=signer_sudo.id
+        ).action_sign(
             items,
             access_token=access_token if token_ok else False,
             latitude=latitude,

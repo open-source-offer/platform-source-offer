@@ -112,8 +112,9 @@ class TrainingDocument(models.Model):
         signataires : l'opération ne doit jamais être ouverte à quelqu'un qui
         n'avait pas déjà le droit de lire la pièce **et** l'enregistrement dont
         elle est issue. Le contrôle est donc explicite et porte sur les deux,
-        en plus des droits d'accès du modèle — aucune élévation, aucun
-        `sudo()` sur ce chemin.
+        en plus des droits d'accès du modèle — aucune élévation pour ce
+        contrôle. La seule écriture en `sudo()` du chemin est le rattachement
+        de la demande à la pièce (voir `action_request_signature`).
 
         :raise UserError: document non émis, ou dépourvu de fichier archivé.
         :raise AccessError: droits insuffisants sur la pièce ou sur sa source.
@@ -208,12 +209,16 @@ class TrainingDocument(models.Model):
             )
 
         source = self._signature_source()
+        # La demande et ses signataires sont créés DANS L'ENVIRONNEMENT DE
+        # L'APPELANT, sans rattachement : ses droits de création et les gardes
+        # d'intégrité (état, signatures, défauts de contexte ou `ir.default`
+        # personnels) s'appliquent. Un `sudo()` ici les aurait toutes
+        # désactivées, `default_get` lisant encore le contexte de l'appelant.
         request = self.env["sign.oca.request"].create(
             {
                 "name": self.name,
                 "data": self.attachment_id.datas,
                 "filename": f"{self.name}.pdf",
-                "training_document_id": self.id,
                 "company_id": self.company_id.id,
                 "record_ref": f"{source._name},{source.id}" if source else False,
                 "signer_ids": [
@@ -229,6 +234,11 @@ class TrainingDocument(models.Model):
                 ],
             }
         )
+        # Seule écriture en `sudo()`, et seul champ : le rattachement à la pièce
+        # (voir LINK_FIELDS), posé pendant que la demande est en brouillon. Les
+        # droits de l'appelant sur la pièce et sa source ont été vérifiés par
+        # `_assert_signature_allowed()`.
+        request.sudo().write({"training_document_id": self.id})
         return request.get_formview_action()
 
     def action_open_sign_requests(self):

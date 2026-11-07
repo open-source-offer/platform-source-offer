@@ -50,6 +50,22 @@ Conséquences, non négociables :
 
 # Notes de version
 
+- 19.0.1.0.2 — durcissement du parapheur (ADR-SIGN-02) : (1) l'invitation de
+  signature (lien et jeton) est émise par le système au nom d'OdooBot, avec la
+  marque de la société de la demande : l'interne qui envoie ne peut plus la
+  relire ; une note sans lien reste au fil de la demande ; (2) la migration
+  remplace les liens à jeton des invitations déjà postées par la liste du
+  portail et rejoue les purges de la 19.0.1.0.1 ; le renouvellement des jetons
+  et le renvoi (`sign.oca.request._training_rotate_signer_tokens`) se lancent
+  depuis `odoo shell`, sur décision de l'exploitant, jamais automatiquement ;
+  les anciens liens cessent alors de fonctionner ; (3) `action_sign` n'est plus
+  appelable en RPC : elle est réservée au contrôleur de signature ; (4) dès
+  l'envoi, signataires, signatures, pièce et état du parapheur ne sont plus
+  modifiables à la main (annulation exceptée) ; une copie de demande ne
+  recopie plus les signatures ; (5) le jeton du journal est réservé aux
+  administrateurs. Les échecs de remise des invitations ne sont plus signalés à
+  l'expéditeur : à superviser dans Paramètres > Technique > Courriels.
+
 - 19.0.1.0.1 — correctif de sécurité : (1) le téléchargement du PDF depuis le
   portail (`/my/sign/<id>/download`) vérifie désormais que l'utilisateur est
   signataire (ou parent d'un signataire) ou interne avec droit de lecture,
@@ -61,7 +77,7 @@ Conséquences, non négociables :
   jetons d'accès des PDF de parapheur déjà émis. Pour le téléchargement, les
   internes ne passent que par leurs droits propres.
 """,
-    "version": "19.0.1.0.1",
+    "version": "19.0.1.0.2",
     "category": "Human Resources/Training",
     "author": "AMWALO.COM",
     "website": "https://www.amwalo.com",
