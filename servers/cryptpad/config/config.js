@@ -25,7 +25,13 @@ module.exports = {
 
     // Pas d'éviction automatique des documents inactifs : Odoo reste le système de référence,
     // mais on évite toute suppression silencieuse de données.
-    disableIntegratedEviction: true,
+    // Éviction intégrée ACTIVE (1 passage par jour, 24 h après le démarrage) : supprime les documents persistants
+    // créés hors Odoo. Les pads d'intégration sont selfdestruct (archivés dès le départ du dernier éditeur) et
+    // tout document modifié depuis moins de inactiveTime jours est conservé.
+    disableIntegratedEviction: false,
+    inactiveTime: 30,          // jours sans modification avant archivage d'un document non épinglé
+    archiveRetentionTime: 1,   // jours avant suppression définitive d'une archive (aligné sur ARCHIVE_RETENTION_DAYS)
+    accountRetentionTime: 30,  // jours d'inactivité avant suppression d'un compte enregistré (et de son drive)
 
     maxUploadSize: 20 * 1024 * 1024,
 

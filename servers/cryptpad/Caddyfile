@@ -32,12 +32,43 @@
 	}
 }
 
+# Navigation directe interdite (P-2) : l'éditeur n'est destiné qu'à être intégré (iframe) par Odoo. Une visite
+# directe d'un navigateur (Sec-Fetch-Dest: document) créerait des documents persistants hors Odoo : réponse 403
+# neutre (sans marque). Les chargements en iframe, scripts, styles, images et websocket ne sont pas concernés.
+# Exception : la page de licence AGPL (§13), qui doit rester publique. Limite connue : un navigateur ancien
+# n'envoyant pas Sec-Fetch-* (ou un client non navigateur) n'est pas filtré ici ; l'éviction intégrée de
+# CryptPad (config.js : inactiveTime) supprime alors les documents inactifs. Choix « fail open » assumé, car
+# bloquer sans Sec-Fetch-Dest casserait aussi les iframes d'intégration de ces navigateurs.
+(block_direct_navigation) {
+	# /install (création du premier compte administrateur par jeton journalisé au démarrage) et /admin :
+	# aucun usage prévu (adminKeys vide, administration par config.js/décrets) -> refusés SANS condition,
+	# y compris pour les clients qui n'envoient pas Sec-Fetch-Dest.
+	@admin_paths path /install /install/* /admin /admin/*
+	handle @admin_paths {
+		header Cache-Control "no-store"
+		header Content-Type "text/html; charset=utf-8"
+		respond "<!doctype html><meta charset=utf-8><title>Accès refusé</title><p>Accès refusé.</p>" 403
+	}
+	@direct_nav {
+		header Sec-Fetch-Dest document
+		not path /customize/licence.html
+	}
+	handle @direct_nav {
+		header Cache-Control "no-store"
+		header Content-Type "text/html; charset=utf-8"
+		respond "<!doctype html><meta charset=utf-8><title>Accès refusé</title><p>Accès refusé.</p>" 403
+	}
+}
+
 # Domaine principal : interface, API et websocket.
 {$COLLAB_DOMAIN} {
 	encode zstd gzip
 	import security_headers
-	reverse_proxy cryptpad:3000 {
-		import embedding_policy
+	import block_direct_navigation
+	handle {
+		reverse_proxy cryptpad:3000 {
+			import embedding_policy
+		}
 	}
 }
 
@@ -45,7 +76,10 @@
 {$COLLAB_SANDBOX_DOMAIN} {
 	encode zstd gzip
 	import security_headers
-	reverse_proxy cryptpad:3001 {
-		import embedding_policy
+	import block_direct_navigation
+	handle {
+		reverse_proxy cryptpad:3001 {
+			import embedding_policy
+		}
 	}
 }
