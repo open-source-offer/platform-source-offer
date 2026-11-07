@@ -1,0 +1,51 @@
+# Reverse proxy TLS (certificats Let's Encrypt automatiques). Variables d'environnement : voir docker-compose.yml.
+{
+	email {$ACME_EMAIL}
+	# HTTP/1.1 et HTTP/2 seulement : aucun port UDP 443 à ouvrir.
+	servers {
+		protocols h1 h2
+	}
+}
+
+# Politique d'intégration (iframe) : le serveur, avec l'option « embedding » activée (décret ENABLE_EMBEDDING),
+# émet frame-ancestors 'self' https: vector: (n'importe quel site https). On la RESTREINT ici aux seules origines
+# voulues : le domaine principal (le bac à sable est intégré par le domaine principal) et les origines Odoo.
+# Le motif couvre toute directive frame-ancestors émise par l'amont, quelle que soit sa forme.
+# Réglage de politique d'en-tête de sécurité ; aucune réécriture du contenu servi.
+(embedding_policy) {
+	header_down Content-Security-Policy "frame-ancestors [^;]*" "frame-ancestors 'self' {$COLLAB_ORIGIN} {$FRAME_ANCESTORS}"
+}
+
+# En-têtes de sécurité communs. « ? » = posé seulement si l'amont ne l'a pas déjà fait (pas d'écrasement de
+# la politique de l'application). CSP de repli : réponses sans CSP (fichiers statiques, erreurs) non intégrables ailleurs.
+(security_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		?X-Content-Type-Options "nosniff"
+		?Referrer-Policy "no-referrer"
+		?Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
+		?Content-Security-Policy "frame-ancestors 'self' {$COLLAB_ORIGIN} {$FRAME_ANCESTORS}"
+		# Pas d'en-têtes révélant les logiciels (identité neutre, moindre information).
+		-Server
+		-Via
+		-X-Powered-By
+	}
+}
+
+# Domaine principal : interface, API et websocket.
+{$COLLAB_DOMAIN} {
+	encode zstd gzip
+	import security_headers
+	reverse_proxy cryptpad:3000 {
+		import embedding_policy
+	}
+}
+
+# Domaine du bac à sable (httpSafeOrigin) : même processus, port 3001.
+{$COLLAB_SANDBOX_DOMAIN} {
+	encode zstd gzip
+	import security_headers
+	reverse_proxy cryptpad:3001 {
+		import embedding_policy
+	}
+}

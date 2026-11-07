@@ -19,6 +19,7 @@ installation.
 | Répertoire | Composant | Licence | Remarque |
 |---|---|---|---|
 | `modules/training_org_sign/` | Parapheur des documents de formation | AGPL-3.0 | Requiert `sign_oca` (OCA, AGPL-3.0, commit indiqué dans `modules/training_org_sign/INDEX.md`) et un module **non publié** de NEW LEADERS ACADEMY PRIVEE, régi par une licence propriétaire : l'archive seule ne permet pas de reconstruire cette fonction. |
+| `servers/cryptpad/` | Éditeur collaboratif (adaptations de CryptPad 2026.10.0, © XWiki SAS et contributeurs) | AGPL-3.0 | Configuration et répertoire `customize/` exploités, à appliquer sur l'étiquette amont indiquée dans `servers/cryptpad/UPSTREAM.md`. |
 
 D'autres composants seront ajoutés ici au plus tard à leur mise en service.
 Les composants non modifiés sont disponibles auprès de leur projet d'origine, aux

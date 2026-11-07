@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Logo générique (formes géométriques, sans lettre ni marque) - variante grise. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="280" height="280" viewBox="0 0 80 80" role="img" aria-label="">
+  <rect x="8" y="8" width="44" height="44" rx="10" fill="#939393"/>
+  <circle cx="52" cy="52" r="22" fill="#939393" fill-opacity="0.6"/>
+  <rect x="8" y="8" width="44" height="44" rx="10" fill="none" stroke="#939393" stroke-width="3"/>
+</svg>

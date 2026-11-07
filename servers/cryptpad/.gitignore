@@ -1,0 +1,4 @@
+# Jamais versionnés : variables d'exploitation, données, sauvegardes
+.env
+data/
+*.partial

@@ -1,0 +1,73 @@
+# Éditeur collaboratif - déploiement de production (identité neutre).
+# Logiciel libre sous licence GNU AGPL-3.0 : voir README.md, LICENSE et UPSTREAM.md.
+#
+# Images épinglées par digest (jamais « latest »). Voir UPSTREAM.md pour la procédure de montée de version.
+# Variables : copier .env.example en .env et le remplir (le fichier .env n'est pas versionné).
+# Nom de projet : COMPOSE_PROJECT_NAME (dans .env) ou option -p.
+services:
+  cryptpad:
+    # cryptpad/cryptpad:version-2026.10.0 (index multi-architecture amd64/arm64)
+    image: cryptpad/cryptpad:version-2026.10.0@sha256:61a12565a532a046996e47b3180a8ac9855d86c262dc98a1bb8d1107557bfe3a
+    restart: unless-stopped
+    hostname: cryptpad
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      # Origine principale (httpUnsafeOrigin) et origine du bac à sable (httpSafeOrigin) : DEUX noms de domaine distincts.
+      CPAD_MAIN_DOMAIN: ${COLLAB_ORIGIN:?COLLAB_ORIGIN manquant (ex. https://collab.amwalo.com)}
+      CPAD_SANDBOX_DOMAIN: ${COLLAB_SANDBOX_ORIGIN:?COLLAB_SANDBOX_ORIGIN manquant (ex. https://collab-sandbox.amwalo.com)}
+      # Pas d'installation de la suite bureautique (téléchargement tiers au démarrage) : CPAD_INSTALL_OFFICE non défini.
+    volumes:
+      - ${DATA_DIR:-./data}/blob:/cryptpad/blob
+      - ${DATA_DIR:-./data}/block:/cryptpad/block
+      - ${DATA_DIR:-./data}/data:/cryptpad/data
+      - ${DATA_DIR:-./data}/datastore:/cryptpad/datastore
+      # customize/ doit être inscriptible : le démarrage de l'image y génère les pages (npm run build).
+      # prepare-data.sh en recopie le contenu versionné (./customize) à chaque déploiement.
+      - ${DATA_DIR:-./data}/customize:/cryptpad/customize
+      - ./config:/cryptpad/config:ro
+      - type: tmpfs
+        target: /tmp
+    ulimits:
+      nofile:
+        soft: 1000000
+        hard: 1000000
+    # Aucun port publié : seul le reverse proxy est exposé.
+    expose:
+      - "3000"
+      - "3001"
+    # VM de 4 Go : plafond sous la RAM physique (mesure au repos ≈ 300 Mio), à réajuster d'après « docker stats ».
+    mem_limit: 2g
+    pids_limit: 512
+
+  caddy:
+    # caddy:2.11.8
+    image: caddy:2.11.8@sha256:4fcafa98afd1c2e642e353e3c5cf9ddbe892fcee14bc990e7ba2c5b78e51f9cf
+    restart: unless-stopped
+    depends_on:
+      - cryptpad
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    mem_limit: 256m
+    pids_limit: 128
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL manquant}
+      COLLAB_ORIGIN: ${COLLAB_ORIGIN:?COLLAB_ORIGIN manquant}
+      COLLAB_DOMAIN: ${COLLAB_DOMAIN:?COLLAB_DOMAIN manquant (ex. collab.amwalo.com)}
+      COLLAB_SANDBOX_DOMAIN: ${COLLAB_SANDBOX_DOMAIN:?COLLAB_SANDBOX_DOMAIN manquant (ex. collab-sandbox.amwalo.com)}
+      # Origines Odoo autorisées à intégrer l'éditeur en iframe (séparées par des espaces).
+      FRAME_ANCESTORS: ${FRAME_ANCESTORS:?FRAME_ANCESTORS manquant}
+    # Seuls 80 (redirection + défi ACME) et 443 (TCP) sont publiés ; HTTP/3 (UDP) désactivé dans le Caddyfile.
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${DATA_DIR:-./data}/caddy-data:/data
+      - type: tmpfs
+        target: /config

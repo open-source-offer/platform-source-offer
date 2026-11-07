@@ -1,0 +1,162 @@
+// SPDX-FileCopyrightText: 2023 XWiki CryptPad Team <contact@cryptpad.org> and contributors
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+// bg #e7e7e7
+// blue #0087FF
+// text #3F4141
+define([
+    '/customize/messages.js',
+    '/customize/lucide.js',
+    'less!/customize/src/less2/include/loading.less'
+], function (Messages, Lucide) {
+    var urlArgs = window.location.href.replace(/^.*\?([^\?]*)$/, function (all, x) { return x; });
+    var elem = document.createElement('div');
+    elem.setAttribute('id', 'cp-loading');
+
+    const logoPath = '/customize/CryptPad_logo_grey.svg';// XXX custom
+    elem.innerHTML = `
+<div></div>
+<div class="cp-loading-container">
+    <div class="cp-loading-progress" aria-hidden="true" role="presentation">
+        <div class="cp-loading-progress-list"></div>
+        <div class="cp-loading-progress-container"></div>
+    </div>
+    <div id="cp-loading-spinner-message"></div>
+    <div class="cp-loading-spinner-container">
+        <div class="cp-spinner-main"></div>
+    </div>
+    <p id="cp-loading-message"></p>
+</div>
+<div id="cp-loading-footer">
+    <div class="cp-loading-logo">
+        <img class="cp-loading-cryptofist" src="${logoPath}?${urlArgs}" alt="" aria-hidden="true"><span>Éditeur collaboratif</span>
+    </div>
+    <div id="cp-loading-status">
+        <i data-lucide="lock" aria-hidden="true"></i>
+        <span>${Messages.loading_encrypted}</span>
+    </div>
+    <a class="cp-loading-licence" href="/customize/licence.html" target="_blank" rel="noopener" style="margin-left:1em;color:inherit">${Messages.footer_source}</a>
+</div>
+`;
+    var built = false;
+
+    var types = ['less', 'drive', 'migrate', 'sf', 'team', 'pad', 'end']; // Msg.loading_state_0, loading_state_1, loading_state_2, loading_state_3, loading_state_4, loading_state_5
+    var current, progress;
+    var makeList = function (data) {
+        if (data.type === "end") { return ''; }
+        var c = types.indexOf(data.type);
+        current = c;
+        const msg = Messages['loading_state_'+c];
+        return `<span>${msg}</span>`;
+
+        /*
+        var getLi = function (i) {
+            var check = (i < c || (i === c && data.progress >= 100)) ? 'square-check'
+                                                                      : 'square';
+            var percentStr = '';
+            if (i === c) {
+                var p = Math.min(Math.floor(data.progress), 100);
+                percentStr = '<span class="percent">('+p+'%)</span>';
+            }
+            return '<li><i data-lucide="'+check+'"></i><span>'+Messages['loading_state_'+i]+'</span>' + percentStr;
+        };
+        var list = '<ul>';
+        types.forEach(function (el, i) {
+            if (el === "end") { return; }
+            list += getLi(i);
+        });
+        list += '</ul>';
+        return list;
+        */
+    };
+    var makeBar = function (data) {
+        var c = types.indexOf(data.type);
+        var l = types.length - 1; // don't count "end" as a type
+        var progress = Math.min(data.progress, 100);
+        var p = (progress / l) + (100 * c / l);
+        var bar = '<div class="cp-loading-progress-bar">'+
+                    '<div class="cp-loading-progress-bar-value" style="width:'+p+'%"></div>'+
+                  '</div>';
+        return bar;
+    };
+
+    var isOffline = false;
+    var updateLoadingProgress = function (data) {
+        if (!built || !data) { return; }
+
+        // If we receive a "offline" event, show the warning text
+        if (data.type === "offline") {
+            try {
+                isOffline = true;
+                document.querySelector('#cp-loading-message').setAttribute('style', 'display:block;');
+                document.querySelector('#cp-loading-message').innerText = Messages.offlineError;
+            } catch (e) { console.error(e); }
+            return;
+        }
+
+        // If we receive a new event and we were offline, remove
+        // the offline warning text
+        if (isOffline) {
+            try {
+                isOffline = false;
+                document.querySelector('#cp-loading-message').setAttribute('style', 'display:none;');
+            } catch (e) { console.error(e); }
+        }
+
+        // Make sure progress doesn't go backward
+        var c = types.indexOf(data.type);
+        if (c < current) { return console.debug(data); }
+        if (c === current && progress > data.progress) { return console.debug(data); }
+        progress = data.progress;
+
+        try {
+            var el1 = document.querySelector('.cp-loading-spinner-container');
+            if (el1) { el1.style.display = 'none'; }
+            var el2 = document.querySelector('.cp-loading-progress-list');
+            if (el2) { el2.innerHTML = makeList(data); }
+            var el3 = document.querySelector('.cp-loading-progress-container');
+            if (el3) { el3.innerHTML = makeBar(data); }
+            var el4 = document.querySelector('#cp-loading-status');
+            if (el4) { el4.setAttribute('style', ''); }
+        } catch (e) {
+            console.error(e);
+        }
+    };
+    window.CryptPad_updateLoadingProgress = updateLoadingProgress;
+
+    window.CryptPad_loadingError = function (err) {
+        if (!built) { return; }
+
+        if (err === 'Error: XDR encoding failure') {
+            console.warn(err);
+            return;
+        }
+
+        var err2;
+        if (err === 'Script error.') {
+            err2 = Messages.error_unhelpfulScriptError;
+        }
+
+        try {
+            var node = document.querySelector('.cp-loading-progress');
+            if (!node) { return; }
+            if (node.parentNode) { node.parentNode.removeChild(node); }
+            document.querySelector('.cp-loading-spinner-container').setAttribute('style', 'display:none;');
+            document.querySelector('#cp-loading-message').setAttribute('style', 'display:block;');
+            document.querySelector('#cp-loading-message').innerText = err2 || err;
+        } catch (e) { console.error(e); }
+    };
+    return function () {
+        built = true;
+        var intr;
+        var append = function () {
+            if (!document.body) { return; }
+            clearInterval(intr);
+            document.body.appendChild(elem);
+            Lucide.createIcons();
+        };
+        intr = setInterval(append, 100);
+        append();
+    };
+});
